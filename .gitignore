@@ -1,1 +1,22 @@
-/target
+/target/
+/dist/
+**/*.rs.bk
+
+# cargo-dist
+/target/dist/
+/target/distrib/
+
+# IDE
+/.idea/
+/.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local secrets/config (never commit real tokens/cookies)
+config.toml
