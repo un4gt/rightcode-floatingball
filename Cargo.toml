@@ -2,6 +2,8 @@
 name = "rightcode-floatingball"
 version = "0.1.0"
 edition = "2024"
+description = "A floating desktop ball to display RightCode subscription quota (iced)"
+homepage = "https://github.com/un4gt/rightcode-floatingball"
 repository = "https://github.com/un4gt/rightcode-floatingball"
 readme = "README.md"
 
