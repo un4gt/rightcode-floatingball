@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::config::{normalize_bearer_token, normalize_cookie_header_value, AppConfig};
+use crate::config::{AppConfig, normalize_bearer_token, normalize_cookie_header_value};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubscriptionsResponse {

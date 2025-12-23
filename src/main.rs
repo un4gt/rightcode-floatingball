@@ -6,4 +6,3 @@ mod config;
 fn main() -> iced::Result {
     app::run()
 }
-

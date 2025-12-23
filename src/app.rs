@@ -1,21 +1,17 @@
 use std::time::{Duration, Instant, SystemTime};
 
-use iced::widget::{
-    button, column, container, row, scrollable, text, text_input, Column,
-};
+use iced::widget::{Column, button, column, container, row, scrollable, text, text_input};
+use iced::widget::{button as btn, container as cnt, text_input as ti};
 use iced::{
-    mouse, window, Color, Element, Font, Length, Point, Size, Subscription, Task,
-    Theme,
+    Border, Color, Element, Font, Length, Point, Size, Subscription, Task, Theme, mouse, window,
 };
 
 use crate::api::{
-    default_subscription_index, fetch_subscriptions, remaining_ratio,
-    Subscription as ApiSubscription,
+    Subscription as ApiSubscription, default_subscription_index, fetch_subscriptions,
+    remaining_ratio,
 };
 use crate::ball::{BallDisplay, BallEvent, BallStatus, FloatingBall};
-use crate::config::{
-    is_configured, try_parse_refresh_seconds, AppConfig, ConfigStore,
-};
+use crate::config::{AppConfig, ConfigStore, is_configured, try_parse_refresh_seconds};
 
 const DEFAULT_BALL_SIZE: f32 = 120.0;
 const MIN_BALL_SIZE: f32 = 80.0;
@@ -37,7 +33,6 @@ pub enum Message {
     CookieChanged(String),
     UserAgentChanged(String),
     RefreshSecondsChanged(String),
-    PreferredNameChanged(String),
     SavePressed,
     Saved(Result<(), String>),
     Fetched(Result<Vec<ApiSubscription>, String>),
@@ -57,7 +52,6 @@ pub struct State {
     cookie_input: String,
     user_agent_input: String,
     refresh_seconds_input: String,
-    preferred_name_input: String,
     show_settings: bool,
     fetching: bool,
     last_updated: Option<SystemTime>,
@@ -97,8 +91,7 @@ pub fn run() -> iced::Result {
             ..window::Settings::default()
         })
         .run_with(|| {
-            let store =
-                ConfigStore::new().expect("config directory should be available");
+            let store = ConfigStore::new().expect("config directory should be available");
             let config = store.load().unwrap_or_default();
 
             let mut state = State {
@@ -107,7 +100,6 @@ pub fn run() -> iced::Result {
                 cookie_input: config.cookie.clone(),
                 user_agent_input: config.user_agent.clone(),
                 refresh_seconds_input: config.refresh_seconds.to_string(),
-                preferred_name_input: config.preferred_subscription_name.clone(),
                 store,
                 config,
                 show_settings: false,
@@ -146,18 +138,14 @@ fn subscription(state: &State) -> Subscription<Message> {
     Subscription::batch([
         iced::time::every(Duration::from_secs(state.config.refresh_seconds.max(5)))
             .map(|_| Message::Tick),
-        iced::time::every(Duration::from_millis(WAVE_TICK_MS))
-            .map(Message::Animate),
+        iced::time::every(Duration::from_millis(WAVE_TICK_MS)).map(Message::Animate),
     ])
 }
 
 fn update(state: &mut State, message: Message) -> Task<Message> {
     match message {
         Message::Ball(event) => match event {
-            BallEvent::StartDrag => state
-                .window_id
-                .map(window::drag)
-                .unwrap_or_else(Task::none),
+            BallEvent::StartDrag => state.window_id.map(window::drag).unwrap_or_else(Task::none),
             BallEvent::ToggleSettings => toggle_settings(state),
             BallEvent::RefreshNow => refresh_now(state),
             BallEvent::Scroll(steps) => {
@@ -180,16 +168,12 @@ fn update(state: &mut State, message: Message) -> Task<Message> {
         Message::Tick => refresh_now(state),
         Message::Animate(now) => {
             let elapsed = now.duration_since(state.wave_origin).as_secs_f32();
-            let phase =
-                (elapsed * WAVE_SPEED).rem_euclid(std::f32::consts::TAU);
+            let phase = (elapsed * WAVE_SPEED).rem_euclid(std::f32::consts::TAU);
             state.ball.set_wave_phase(phase);
             Task::none()
         }
         Message::ToggleSettings => toggle_settings(state),
-        Message::DragWindow => state
-            .window_id
-            .map(window::drag)
-            .unwrap_or_else(Task::none),
+        Message::DragWindow => state.window_id.map(window::drag).unwrap_or_else(Task::none),
         Message::WindowId(id) => {
             state.window_id = id;
             Task::none()
@@ -208,10 +192,6 @@ fn update(state: &mut State, message: Message) -> Task<Message> {
         }
         Message::RefreshSecondsChanged(value) => {
             state.refresh_seconds_input = value;
-            Task::none()
-        }
-        Message::PreferredNameChanged(value) => {
-            state.preferred_name_input = value;
             Task::none()
         }
         Message::SavePressed => save_settings(state),
@@ -237,9 +217,7 @@ fn update(state: &mut State, message: Message) -> Task<Message> {
 
                     state.selected_index = previous_selection
                         .as_deref()
-                        .and_then(|name| {
-                            state.subscriptions.iter().position(|s| s.name == name)
-                        })
+                        .and_then(|name| state.subscriptions.iter().position(|s| s.name == name))
                         .or_else(|| {
                             default_subscription_index(
                                 &state.subscriptions,
@@ -272,10 +250,18 @@ fn view(state: &State) -> Element<'_, Message> {
 }
 
 fn view_settings(state: &State) -> Element<'_, Message> {
+    // 科技感标题
+    let title = text("设置")
+        .size(22)
+        .color(Color::from_rgba8(0, 255, 200, 240.0 / 255.0));
+
     let header_row = row![
-        text("设置").size(22),
+        title,
         iced::widget::horizontal_space(),
-        button("关闭").on_press(Message::ToggleSettings),
+        button("关闭")
+            .on_press(Message::ToggleSettings)
+            .style(cyber_button)
+            .padding([6, 16]),
     ]
     .align_y(iced::Alignment::Center)
     .width(Length::Fill);
@@ -286,53 +272,60 @@ fn view_settings(state: &State) -> Element<'_, Message> {
 
     let path = text(format!("配置文件: {}", state.store.display_path()))
         .size(12)
-        .color(Color::from_rgba8(255, 255, 255, 160.0 / 255.0));
+        .color(Color::from_rgba8(100, 180, 160, 180.0 / 255.0));
 
     let token = text_input("Authorization token (Bearer ...)", &state.token_input)
         .on_input(Message::TokenChanged)
-        .padding(8);
+        .padding(10)
+        .style(cyber_text_input);
 
     let cookie = text_input("Cookie 或 cf_clearance 值", &state.cookie_input)
         .on_input(Message::CookieChanged)
-        .padding(8);
+        .padding(10)
+        .style(cyber_text_input);
 
-    let user_agent =
-        text_input("User-Agent（需与获取 cf_clearance 的浏览器一致）", &state.user_agent_input)
-            .on_input(Message::UserAgentChanged)
-            .padding(8);
+    let user_agent = text_input(
+        "User-Agent（需与获取 cf_clearance 的浏览器一致）",
+        &state.user_agent_input,
+    )
+    .on_input(Message::UserAgentChanged)
+    .padding(10)
+    .style(cyber_text_input);
 
     let refresh = text_input("刷新间隔(秒)", &state.refresh_seconds_input)
         .on_input(Message::RefreshSecondsChanged)
-        .padding(8);
-
-    let preferred = text_input("优先显示订阅名", &state.preferred_name_input)
-        .on_input(Message::PreferredNameChanged)
-        .padding(8);
+        .padding(10)
+        .style(cyber_text_input);
 
     let mut actions = row![
-        button("保存").on_press(Message::SavePressed),
-        button("立即刷新").on_press(Message::Tick),
+        button("保存")
+            .on_press(Message::SavePressed)
+            .style(cyber_button)
+            .padding([8, 20]),
+        button("立即刷新")
+            .on_press(Message::Tick)
+            .style(cyber_button)
+            .padding([8, 20]),
     ]
-    .spacing(10)
+    .spacing(12)
     .align_y(iced::Alignment::Center);
 
     if let Some(err) = &state.last_error {
-        actions =
-            actions.push(text(err).color(Color::from_rgb8(240, 100, 100)));
+        actions = actions.push(text(err).color(Color::from_rgb8(255, 80, 100)));
     }
 
-    let body: Column<Message> =
-        column![path, token, cookie, user_agent, refresh, preferred, actions]
-            .spacing(10)
-            .padding(12);
+    let body: Column<Message> = column![path, token, cookie, user_agent, refresh, actions]
+        .spacing(12)
+        .padding(14);
 
     let content: Column<Message> = column![header, scrollable(body).height(Length::Fill)]
-        .spacing(10);
+        .spacing(12)
+        .padding(10);
 
     container(content)
         .width(Length::Fixed(SETTINGS_WIDTH))
         .height(Length::Fixed(SETTINGS_HEIGHT))
-        .style(container::rounded_box)
+        .style(cyber_settings_container)
         .into()
 }
 
@@ -364,11 +357,6 @@ fn save_settings(state: &mut State) -> Task<Message> {
 
     if let Some(seconds) = try_parse_refresh_seconds(&state.refresh_seconds_input) {
         state.config.refresh_seconds = seconds.max(5);
-    }
-
-    if !state.preferred_name_input.trim().is_empty() {
-        state.config.preferred_subscription_name =
-            state.preferred_name_input.trim().to_string();
     }
 
     state.sync_ball_display();
@@ -444,6 +432,92 @@ fn resize_ball(state: &mut State, cursor: Point) -> Task<Message> {
         .unwrap_or_else(Task::none)
 }
 
+// 科技感输入框样式
+fn cyber_text_input(theme: &Theme, status: ti::Status) -> ti::Style {
+    let _ = theme;
+    let base_bg = Color::from_rgba8(8, 20, 35, 200.0 / 255.0);
+    let border_color = match status {
+        ti::Status::Active | ti::Status::Hovered => Color::from_rgba8(0, 255, 180, 180.0 / 255.0),
+        ti::Status::Focused => Color::from_rgba8(0, 255, 136, 255.0 / 255.0),
+        ti::Status::Disabled => Color::from_rgba8(60, 80, 100, 100.0 / 255.0),
+    };
+    let border_width = match status {
+        ti::Status::Focused => 2.0,
+        _ => 1.5,
+    };
+
+    ti::Style {
+        background: iced::Background::Color(base_bg),
+        border: Border {
+            color: border_color,
+            width: border_width,
+            radius: 6.0.into(),
+        },
+        icon: Color::from_rgba8(0, 200, 180, 200.0 / 255.0),
+        placeholder: Color::from_rgba8(100, 140, 160, 160.0 / 255.0),
+        value: Color::from_rgba8(200, 255, 240, 240.0 / 255.0),
+        selection: Color::from_rgba8(0, 180, 255, 100.0 / 255.0),
+    }
+}
+
+// 科技感按钮样式
+fn cyber_button(theme: &Theme, status: btn::Status) -> btn::Style {
+    let _ = theme;
+    let (bg, border_color) = match status {
+        btn::Status::Active => (
+            Color::from_rgba8(10, 30, 50, 220.0 / 255.0),
+            Color::from_rgba8(0, 255, 136, 180.0 / 255.0),
+        ),
+        btn::Status::Hovered => (
+            Color::from_rgba8(0, 60, 80, 230.0 / 255.0),
+            Color::from_rgba8(0, 255, 200, 255.0 / 255.0),
+        ),
+        btn::Status::Pressed => (
+            Color::from_rgba8(0, 80, 100, 240.0 / 255.0),
+            Color::from_rgba8(0, 255, 255, 255.0 / 255.0),
+        ),
+        btn::Status::Disabled => (
+            Color::from_rgba8(30, 40, 50, 150.0 / 255.0),
+            Color::from_rgba8(60, 80, 100, 100.0 / 255.0),
+        ),
+    };
+
+    btn::Style {
+        background: Some(iced::Background::Color(bg)),
+        text_color: Color::from_rgba8(0, 255, 200, 240.0 / 255.0),
+        border: Border {
+            color: border_color,
+            width: 1.5,
+            radius: 6.0.into(),
+        },
+        shadow: iced::Shadow::default(),
+    }
+}
+
+// 科技感设置容器样式
+fn cyber_settings_container(theme: &Theme) -> cnt::Style {
+    let _ = theme;
+    cnt::Style {
+        background: Some(iced::Background::Color(Color::from_rgba8(
+            5,
+            15,
+            25,
+            240.0 / 255.0,
+        ))),
+        border: Border {
+            color: Color::from_rgba8(0, 255, 136, 150.0 / 255.0),
+            width: 2.0,
+            radius: 12.0.into(),
+        },
+        text_color: None,
+        shadow: iced::Shadow {
+            color: Color::from_rgba8(0, 255, 180, 30.0 / 255.0),
+            offset: iced::Vector::new(0.0, 0.0),
+            blur_radius: 20.0,
+        },
+    }
+}
+
 impl State {
     fn sync_ball_display(&mut self) {
         let selected = self
@@ -451,10 +525,7 @@ impl State {
             .and_then(|i| self.subscriptions.get(i))
             .or_else(|| self.subscriptions.first());
 
-        let (title, mut value, ratio) = match (
-            selected,
-            is_configured(&self.config),
-        ) {
+        let (title, mut value, ratio) = match (selected, is_configured(&self.config)) {
             (_, false) => ("未配置".to_string(), "点右上设置".to_string(), 0.0),
             (Some(sub), true) => {
                 let ratio = remaining_ratio(sub);

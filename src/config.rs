@@ -28,8 +28,7 @@ fn default_refresh_seconds() -> u64 {
 }
 
 fn default_user_agent() -> String {
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0"
-        .to_string()
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0".to_string()
 }
 
 fn default_preferred_subscription_name() -> String {
@@ -68,9 +67,8 @@ pub struct ConfigStore {
 
 impl ConfigStore {
     pub fn new() -> Result<Self, ConfigError> {
-        let project_dirs =
-            ProjectDirs::from("codes", "rightcode", "rightcode-floatingball")
-                .ok_or(ConfigError::MissingConfigDir)?;
+        let project_dirs = ProjectDirs::from("codes", "rightcode", "rightcode-floatingball")
+            .ok_or(ConfigError::MissingConfigDir)?;
         let path = project_dirs.config_dir().join("config.toml");
         Ok(Self { path })
     }
