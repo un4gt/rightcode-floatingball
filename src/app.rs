@@ -12,6 +12,7 @@ use crate::api::{
 };
 use crate::ball::{BallDisplay, BallEvent, BallStatus, FloatingBall};
 use crate::config::{AppConfig, ConfigStore, is_configured, try_parse_refresh_seconds};
+use crate::platform;
 
 const DEFAULT_BALL_SIZE: f32 = 120.0;
 const MIN_BALL_SIZE: f32 = 80.0;
@@ -176,7 +177,7 @@ fn update(state: &mut State, message: Message) -> Task<Message> {
         Message::DragWindow => state.window_id.map(window::drag).unwrap_or_else(Task::none),
         Message::WindowId(id) => {
             state.window_id = id;
-            Task::none()
+            sync_window_region(state)
         }
         Message::TokenChanged(value) => {
             state.token_input = value;
@@ -329,6 +330,19 @@ fn view_settings(state: &State) -> Element<'_, Message> {
         .into()
 }
 
+fn sync_window_region(state: &State) -> Task<Message> {
+    let Some(id) = state.window_id else {
+        return Task::none();
+    };
+
+    let round = !state.show_settings;
+
+    window::run_with_handle(id, move |handle| {
+        platform::set_round_window_region(handle, round);
+    })
+    .discard()
+}
+
 fn toggle_settings(state: &mut State) -> Task<Message> {
     state.show_settings = !state.show_settings;
     state.resize_drag = None;
@@ -340,10 +354,12 @@ fn toggle_settings(state: &mut State) -> Task<Message> {
     };
 
     state.sync_ball_display();
-    state
+    let resize_task = state
         .window_id
         .map(|id| window::resize(id, new_size))
-        .unwrap_or_else(Task::none)
+        .unwrap_or_else(Task::none);
+
+    resize_task.chain(sync_window_region(state))
 }
 
 fn save_settings(state: &mut State) -> Task<Message> {
@@ -426,10 +442,12 @@ fn resize_ball(state: &mut State, cursor: Point) -> Task<Message> {
     state.ball_size = new_size;
     state.sync_ball_display();
 
-    state
+    let resize_task = state
         .window_id
         .map(|id| window::resize(id, Size::new(new_size, new_size)))
-        .unwrap_or_else(Task::none)
+        .unwrap_or_else(Task::none);
+
+    resize_task.chain(sync_window_region(state))
 }
 
 // 科技感输入框样式
