@@ -9,6 +9,8 @@
 - 鼠标滚轮切换订阅
 - 右下角拖拽调整悬浮球大小
 - 设置页支持配置 `Authorization token / Cookie(cf_clearance) / User-Agent / 刷新间隔`
+- 系统托盘菜单：刷新 / 设置 / 退出
+- 设置页支持开机自启动（Windows/macOS）
 
 ## 本地运行
 

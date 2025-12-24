@@ -17,6 +17,8 @@ pub struct AppConfig {
     pub refresh_seconds: u64,
     #[serde(default = "default_preferred_subscription_name")]
     pub preferred_subscription_name: String,
+    #[serde(default)]
+    pub autostart: bool,
 }
 
 fn default_api_base() -> String {
@@ -44,6 +46,7 @@ impl Default for AppConfig {
             cookie: String::new(),
             refresh_seconds: default_refresh_seconds(),
             preferred_subscription_name: default_preferred_subscription_name(),
+            autostart: false,
         }
     }
 }
@@ -131,4 +134,27 @@ pub fn try_parse_refresh_seconds(input: &str) -> Option<u64> {
         return None;
     }
     trimmed.parse::<u64>().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppConfig;
+
+    #[test]
+    fn parses_missing_autostart_as_false() {
+        let raw = r#"
+api_base = "https://right.codes"
+"#;
+        let config = toml::from_str::<AppConfig>(raw).expect("valid config");
+        assert!(!config.autostart);
+    }
+
+    #[test]
+    fn parses_autostart_true() {
+        let raw = r#"
+autostart = true
+"#;
+        let config = toml::from_str::<AppConfig>(raw).expect("valid config");
+        assert!(config.autostart);
+    }
 }

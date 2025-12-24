@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant, SystemTime};
 
+use iced::widget::checkbox;
 use iced::widget::{Column, button, column, container, row, scrollable, text, text_input};
 use iced::widget::{button as btn, container as cnt, text_input as ti};
 use iced::{
@@ -13,6 +14,8 @@ use crate::api::{
 use crate::ball::{BallDisplay, BallEvent, BallStatus, FloatingBall};
 use crate::config::{AppConfig, ConfigStore, is_configured, try_parse_refresh_seconds};
 use crate::platform;
+use crate::tray::TrayAction;
+use crate::{autostart, tray};
 
 const DEFAULT_BALL_SIZE: f32 = 120.0;
 const MIN_BALL_SIZE: f32 = 80.0;
@@ -21,6 +24,7 @@ const SETTINGS_WIDTH: f32 = 420.0;
 const SETTINGS_HEIGHT: f32 = 440.0;
 const WAVE_SPEED: f32 = 2.2;
 const WAVE_TICK_MS: u64 = 33;
+const TRAY_POLL_MS: u64 = 200;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -34,9 +38,11 @@ pub enum Message {
     CookieChanged(String),
     UserAgentChanged(String),
     RefreshSecondsChanged(String),
+    AutostartToggled(bool),
     SavePressed,
     Saved(Result<(), String>),
     Fetched(Result<Vec<ApiSubscription>, String>),
+    TrayPoll,
 }
 
 impl From<BallEvent> for Message {
@@ -53,6 +59,7 @@ pub struct State {
     cookie_input: String,
     user_agent_input: String,
     refresh_seconds_input: String,
+    autostart_input: bool,
     show_settings: bool,
     fetching: bool,
     last_updated: Option<SystemTime>,
@@ -63,6 +70,7 @@ pub struct State {
     resize_drag: Option<ResizeDrag>,
     wave_origin: Instant,
     ball: FloatingBall,
+    _tray: Option<tray::Tray>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -94,6 +102,7 @@ pub fn run() -> iced::Result {
         .run_with(|| {
             let store = ConfigStore::new().expect("config directory should be available");
             let config = store.load().unwrap_or_default();
+            let autostart_enabled = autostart::is_enabled().unwrap_or(config.autostart);
 
             let mut state = State {
                 window_id: None,
@@ -101,6 +110,7 @@ pub fn run() -> iced::Result {
                 cookie_input: config.cookie.clone(),
                 user_agent_input: config.user_agent.clone(),
                 refresh_seconds_input: config.refresh_seconds.to_string(),
+                autostart_input: autostart_enabled,
                 store,
                 config,
                 show_settings: false,
@@ -113,9 +123,12 @@ pub fn run() -> iced::Result {
                 resize_drag: None,
                 wave_origin: Instant::now(),
                 ball: FloatingBall::new(BallDisplay::default()),
+                _tray: None,
             };
 
             state.sync_ball_display();
+
+            state._tray = tray::Tray::new().ok();
 
             let window_task = window::get_oldest().map(Message::WindowId);
 
@@ -132,11 +145,14 @@ pub fn run() -> iced::Result {
 }
 
 fn subscription(state: &State) -> Subscription<Message> {
+    let tray = iced::time::every(Duration::from_millis(TRAY_POLL_MS)).map(|_| Message::TrayPoll);
+
     if state.show_settings {
-        return Subscription::none();
+        return tray;
     }
 
-    Subscription::batch([
+    Subscription::batch(vec![
+        tray,
         iced::time::every(Duration::from_secs(state.config.refresh_seconds.max(5)))
             .map(|_| Message::Tick),
         iced::time::every(Duration::from_millis(WAVE_TICK_MS)).map(Message::Animate),
@@ -177,7 +193,7 @@ fn update(state: &mut State, message: Message) -> Task<Message> {
         Message::DragWindow => state.window_id.map(window::drag).unwrap_or_else(Task::none),
         Message::WindowId(id) => {
             state.window_id = id;
-            sync_window_region(state)
+            sync_window_layout(state)
         }
         Message::TokenChanged(value) => {
             state.token_input = value;
@@ -193,6 +209,10 @@ fn update(state: &mut State, message: Message) -> Task<Message> {
         }
         Message::RefreshSecondsChanged(value) => {
             state.refresh_seconds_input = value;
+            Task::none()
+        }
+        Message::AutostartToggled(enabled) => {
+            state.autostart_input = enabled;
             Task::none()
         }
         Message::SavePressed => save_settings(state),
@@ -236,6 +256,7 @@ fn update(state: &mut State, message: Message) -> Task<Message> {
             state.sync_ball_display();
             Task::none()
         }
+        Message::TrayPoll => handle_tray_events(state),
     }
 }
 
@@ -298,6 +319,17 @@ fn view_settings(state: &State) -> Element<'_, Message> {
         .padding(10)
         .style(cyber_text_input);
 
+    let autostart_row: Element<'_, Message> = if autostart::is_supported() {
+        checkbox("开机自启动", state.autostart_input)
+            .on_toggle(Message::AutostartToggled)
+            .into()
+    } else {
+        text("开机自启动（仅 Windows/macOS 支持）")
+            .size(12)
+            .color(Color::from_rgba8(100, 180, 160, 180.0 / 255.0))
+            .into()
+    };
+
     let mut actions = row![
         button("保存")
             .on_press(Message::SavePressed)
@@ -315,9 +347,17 @@ fn view_settings(state: &State) -> Element<'_, Message> {
         actions = actions.push(text(err).color(Color::from_rgb8(255, 80, 100)));
     }
 
-    let body: Column<Message> = column![path, token, cookie, user_agent, refresh, actions]
-        .spacing(12)
-        .padding(14);
+    let body: Column<Message> = column![
+        path,
+        token,
+        cookie,
+        user_agent,
+        refresh,
+        autostart_row,
+        actions
+    ]
+    .spacing(12)
+    .padding(14);
 
     let content: Column<Message> = column![header, scrollable(body).height(Length::Fill)]
         .spacing(12)
@@ -341,6 +381,20 @@ fn sync_window_region(state: &State) -> Task<Message> {
         platform::set_round_window_region(handle, round);
     })
     .discard()
+}
+
+fn sync_window_layout(state: &State) -> Task<Message> {
+    let Some(id) = state.window_id else {
+        return Task::none();
+    };
+
+    let new_size = if state.show_settings {
+        Size::new(SETTINGS_WIDTH, SETTINGS_HEIGHT)
+    } else {
+        Size::new(state.ball_size, state.ball_size)
+    };
+
+    window::resize(id, new_size).chain(sync_window_region(state))
 }
 
 fn toggle_settings(state: &mut State) -> Task<Message> {
@@ -375,13 +429,31 @@ fn save_settings(state: &mut State) -> Task<Message> {
         state.config.refresh_seconds = seconds.max(5);
     }
 
+    state.config.autostart = state.autostart_input;
+
     state.sync_ball_display();
 
     let store = state.store.clone();
     let config = state.config.clone();
 
     Task::perform(
-        async move { store.save(&config).map_err(|e| e.to_string()) },
+        async move {
+            let mut errors = Vec::new();
+
+            if let Err(err) = autostart::set_enabled(config.autostart) {
+                errors.push(format!("autostart: {err}"));
+            }
+
+            if let Err(err) = store.save(&config) {
+                errors.push(format!("save: {err}"));
+            }
+
+            if errors.is_empty() {
+                Ok(())
+            } else {
+                Err(errors.join("; "))
+            }
+        },
         Message::Saved,
     )
 }
@@ -448,6 +520,33 @@ fn resize_ball(state: &mut State, cursor: Point) -> Task<Message> {
         .unwrap_or_else(Task::none);
 
     resize_task.chain(sync_window_region(state))
+}
+
+fn open_settings(state: &mut State) -> Task<Message> {
+    if state.show_settings {
+        return Task::none();
+    }
+
+    toggle_settings(state)
+}
+
+fn handle_tray_events(state: &mut State) -> Task<Message> {
+    let actions = tray::drain_actions();
+    if actions.is_empty() {
+        return Task::none();
+    }
+
+    let mut tasks = Vec::with_capacity(actions.len());
+
+    for action in actions {
+        match action {
+            TrayAction::Refresh => tasks.push(refresh_now(state)),
+            TrayAction::Settings => tasks.push(open_settings(state)),
+            TrayAction::Exit => tasks.push(iced::exit()),
+        }
+    }
+
+    Task::batch(tasks)
 }
 
 // 科技感输入框样式
