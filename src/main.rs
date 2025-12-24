@@ -5,6 +5,7 @@ mod app;
 mod autostart;
 mod ball;
 mod config;
+mod executor;
 mod platform;
 mod tray;
 

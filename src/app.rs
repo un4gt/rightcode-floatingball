@@ -13,9 +13,8 @@ use crate::api::{
 };
 use crate::ball::{BallDisplay, BallEvent, BallStatus, FloatingBall};
 use crate::config::{AppConfig, ConfigStore, is_configured, try_parse_refresh_seconds};
-use crate::platform;
 use crate::tray::TrayAction;
-use crate::{autostart, tray};
+use crate::{autostart, executor, platform, tray};
 
 const DEFAULT_BALL_SIZE: f32 = 120.0;
 const MIN_BALL_SIZE: f32 = 80.0;
@@ -81,6 +80,7 @@ struct ResizeDrag {
 
 pub fn run() -> iced::Result {
     iced::application("RightCode Floating Ball", update, view)
+        .executor::<executor::AppExecutor>()
         .theme(|_| Theme::Dark)
         .subscription(subscription)
         .style(|_state, theme| {
